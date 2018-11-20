@@ -612,6 +612,98 @@ describe('harvester', function() {
 
         harvester.setConfig();
       });
+
+      describe('smart', function() {
+        before(function() {
+          harvester.setConfig({
+            js: {
+              wrap: {
+                wrapTargetRegExp: /[a-z]/i,
+                excludes: {
+                  properties: null,
+                  nodeTypes: null,
+                  operators: null
+                }
+              }
+            }
+          });
+        });
+
+        after(function() {
+          harvester.setConfig();
+        });
+
+        describe('no control messages', function() {
+          it.skip('within prompt (unskip for test)', function() {
+            var wrapOptions = defaultsDeep({
+              checkSpaces: false
+            }, JS_WRAP_OPTIONS, {
+              prompt: true
+            });
+
+            this.timeout(300000);
+            test_wrapTranslationTextsInJs('test/data/smart/wrap-translation/js/within_prompt', true, wrapOptions, true);
+          });
+        });
+
+        describe('control messages', function() {
+          it.skip('within prompt (unskip for test)', function() {
+            var controlMessages = harvester.prepareControlMessages(require('test/data/smart/wrap-translation/js/control_messages'));
+
+            var wrapOptions = defaultsDeep({
+              checkSpaces: false
+            }, JS_WRAP_OPTIONS, {
+              controlMessages: controlMessages,
+              boundExcludeChar: BOUND_EXCLUDE_CHAR_EN,
+              prompt: true
+            });
+
+            this.timeout(300000);
+            test_wrapTranslationTextsInJs('test/data/smart/wrap-translation/js/control_messages_within_prompt', true, wrapOptions, true);
+            console.log(testUtils.printObject(getSmartWrapResult(wrapOptions.controlMessages)));
+          });
+
+          it('without prompt', function() {
+            var controlMessages = harvester.prepareControlMessages(
+              require('test/data/smart/wrap-translation/js/control_messages'), {
+                filter: function(message/*, value*/) {
+                  return message.length > 1;
+                },
+                sorter: function(message/*, value*/) {
+                  return -message.length;
+                }
+              }
+            );
+
+            var wrapOptions = defaultsDeep({
+              checkSpaces: false
+            }, JS_WRAP_OPTIONS, {
+              controlMessages: controlMessages,
+              boundExcludeChar: BOUND_EXCLUDE_CHAR_EN,
+              prompt: false
+            });
+
+            test_wrapTranslationTextsInJs('test/data/smart/wrap-translation/js/control_messages_without_prompt', true, wrapOptions);
+
+            var result = getSmartWrapResult(wrapOptions.controlMessages);
+
+            expect(result.allCount).to.be.equal(14);
+            expect(result.noWraps).to.have.lengthOf(3);
+            expect(result.noWraps).to.include('Message Z');
+            expect(result.noWraps).to.not.include('Message 1');
+
+            expect(result.messagesMap['Message Z'].counts.candidate)
+              .to.be.equal(0);
+            expect(result.messagesMap['Message Z'].counts.wrapped)
+              .to.be.equal(0);
+
+            expect(result.messagesMap['Message 1'].counts.candidate)
+              .to.be.equal(9);
+            expect(result.messagesMap['Message 1'].counts.wrapped)
+              .to.be.equal(9);
+          });
+        });
+      });
     });
 
     describe('Lua', function() {
@@ -933,18 +1025,28 @@ describe('harvester', function() {
   });
 });
 
-function test_wrapTranslationTextsInJs(file, dump, wrapOptions) {
+function test_wrapTranslationTextsInJs(file, dump, wrapOptions, onlyPrint) {
   wrapOptions = wrapOptions || JS_WRAP_OPTIONS;
 
   var js = fs.readFileSync(
     file + '.js', 'utf8'
   );
 
+  var result = harvester.wrapTranslationTextsInJs(js, wrapOptions);
+
+  if (onlyPrint) {
+    console.log('\n');
+    console.log(chalk.gray(HR));
+    console.log(chalk.cyan(result.wrapped));
+    console.log(chalk.gray(HR));
+    console.log('\n');
+    return;
+  }
+
   var expextedJs = fs.readFileSync(
     file + '_wrapped.js', 'utf8'
   );
 
-  var result = harvester.wrapTranslationTextsInJs(js, wrapOptions);
   dump && fs.outputFileSync('test/tmp/' + file + '_wrapped.js', result.wrapped);
   assert_wrapTranslationTextsInJs(js, result, expextedJs);
 
